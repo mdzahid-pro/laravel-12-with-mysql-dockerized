@@ -1,0 +1,120 @@
+services:
+  nginx:
+    build:
+      context: ./docker/nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      - php
+    networks:
+      - app-network
+
+  php:
+    build:
+      context: ./docker/php
+      args:
+        PHP_VERSION: 8.4
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+      - memcached
+    networks:
+      - app-network
+
+  node:
+    build:
+      context: ./docker/node
+    volumes:
+      - ./src:/var/www/html
+    ports:
+      - "5173:5173"
+    networks:
+      - app-network
+    tty: true
+    command: /bin/sh -c "cd /var/www/html && npm run dev"
+
+  mysql:
+    image: mysql:latest
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: laravel
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_ARBITRARY: 1
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root
+      PMA_USER: laravel
+      PMA_PASSWORD: laravel
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - app-network
+
+  supervisor:
+    build:
+      context: ./docker/supervisor
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      - php
+      - mysql
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+  memcached:
+    image: memcached:alpine
+    ports:
+      - "11211:11211"
+    networks:
+      - app-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
